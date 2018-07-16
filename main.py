@@ -4,7 +4,7 @@ import fileinput
 
 from pretty import Pretty
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     p = Pretty()
 
     for line in fileinput.input():
