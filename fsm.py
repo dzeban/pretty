@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+import sys
+
 """This module implements a Finite State Machine (FSM). In addition to state
 this FSM also maintains a user defined "memory". So this FSM can be used as a
 Push-down Automata (PDA) since a PDA is a FSM + memory.
@@ -218,6 +220,7 @@ class FSM:
 
         self.input_symbol = input_symbol
         self.action, self.next_state = self.get_transition(self.input_symbol, self.current_state)
+        print("'{}' {} -> {} {}".format(self.input_symbol, self.current_state, self.action, self.next_state), file=sys.stderr)
         if self.action is not None:
             self.action(self)
         self.current_state = self.next_state
