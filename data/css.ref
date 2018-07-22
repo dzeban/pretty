@@ -1,0 +1,68 @@
+.content {
+    font-size: 1.2em;
+}
+pre {
+    font-family: monospace;
+}
+ul.post-list {
+    list-style: none;
+}
+.post-list li {
+    padding-top: 1em;
+    font-size: 1.1em;
+}
+.date {
+    font-size: 0.85em;
+    color: #666;
+}
+/* navbar */ .navbar-inverse {
+    background: #003585;
+}
+.navbar-inverse .navbar-nav>.active>a, .navbar-inverse .navbar-nav>.active>a:hover, .navbar-inverse .navbar-nav>.active>a:focus {
+    color: #fff;
+    background: #1A237E;
+}
+.navbar-inverse .navbar-nav a span {
+    color: #fff;
+}
+.navbar-inverse .navbar-nav a:hover, .navbar-inverse .navbar-nav a:focus {
+    background: #1A237E !important;
+}
+.navbar-inverse .navbar-nav a {
+    font-size: 1.8rem
+}
+.navbar-inverse .navbar-nav .open .dropdown-menu>li>a, .navbar-inverse .navbar-nav .open .dropdown-menu {
+    background-color: #303F9F;
+    color: #eeeeee;
+}
+.navbar-inverse .navbar-nav .open .dropdown-menu>li>a:hover {
+    color: #000000;
+}
+.navbar-inverse .navbar-brand:hover, .navbar-inverse .navbar-brand:focus {
+    background-color: transparent;
+    color: #FFFFFF;
+}
+.navbar-inverse .navbar-brand {
+    color: #FFFFFF;
+}
+/* navbar hamburger */ .navbar-toggle .icon-bar:nth-of-type(2) {
+    top: 1px;
+}
+.navbar-toggle .icon-bar:nth-of-type(3) {
+    top: 2px;
+}
+.navbar-toggle .icon-bar {
+    position: relative;
+    transition: all 500ms ease-in-out;
+}
+.navbar-toggle.active .icon-bar:nth-of-type(1) {
+    top: 6px;
+    transform: rotate(45deg);
+}
+.navbar-toggle.active .icon-bar:nth-of-type(2) {
+    background-color: transparent;
+}
+.navbar-toggle.active .icon-bar:nth-of-type(3) {
+    top: -6px;
+    transform: rotate(-45deg);
+}

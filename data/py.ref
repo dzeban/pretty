@@ -1,0 +1,24 @@
+{
+    'changed': true,
+    'cmd': 'ls',
+    'delta': '0:00:00.007621',
+    'end': '2017-02-17 23:04:41.912570',
+    'invocation': {
+        'module_args': {
+            '_raw_params': 'ls',
+             '_uses_shell': true,
+             'chdir': null,
+             'creates': null,
+             'executable': null,
+             'removes': null,
+             'warn': true
+         },
+         'module_name': 'command'
+    },
+    'rc': 0,
+    'start': '2017-02-17 23:04:41.904949',
+    'stderr': '',
+    'stdout': 'play.retry\nplay.yml',
+    'stdout_lines': ['play.retry', 'play.yml'],
+    'warnings': []
+}
