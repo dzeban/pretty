@@ -19,6 +19,8 @@ const (
 	StateLineEnd     StateId = "LineEnd"
 	StateWhitespace  StateId = "Whitespace"
 	StateWhitespace1 StateId = "Whitespace1"
+	StateBlockOpen   StateId = "BlockOpen"
+	StateBlockClose  StateId = "BlockClose"
 )
 
 type Event int
@@ -32,6 +34,8 @@ const (
 	EventWhitespace
 	EventNonWhitespace
 	EventLineSeparator
+	EventBlockOpen
+	EventBlockClose
 )
 
 type State struct {
@@ -44,9 +48,9 @@ type StateMachine map[StateId]State
 type Runner struct {
 	stateMachine StateMachine
 	input        *bufio.Reader
-	cur          byte
-	indentLevel  int
 	indent       string
+	indentLevel  int
+	cur          byte
 }
 
 func NewRunner(sm StateMachine, input io.Reader) (*Runner, error) {
@@ -100,6 +104,10 @@ func (r *Runner) Print() {
 	os.Stdout.Write([]byte{r.cur})
 }
 
+func (r *Runner) Newline() {
+	os.Stdout.WriteString("\n")
+}
+
 func (r *Runner) Advance() error {
 	var err error
 	r.cur, err = r.input.ReadByte()
@@ -124,9 +132,12 @@ func (r *Runner) DecreaseIndent() {
 }
 
 var (
-	RegexAlphanum   = regexp.MustCompile("[a-zA-Z0-9]")
-	RegexLine       = regexp.MustCompile("[,;\n]")
-	RegexWhitespace = regexp.MustCompile("[ \t]")
+	RegexAlphanum          = regexp.MustCompile(`[^{(\[\])} \t\n,;]`)
+	RegexLine              = regexp.MustCompile(`[,;\n]`)
+	RegexWhitespace        = regexp.MustCompile(`[ \t]`)
+	RegexWhitespaceNewline = regexp.MustCompile(`[ \t\n]`)
+	RegexBlockOpen         = regexp.MustCompile(`[{(\[]`)
+	RegexBlockClose        = regexp.MustCompile(`[})\]]`)
 )
 
 func Main(runner *Runner) (Event, error) {
@@ -141,6 +152,14 @@ func Main(runner *Runner) (Event, error) {
 
 	if RegexWhitespace.Match(cur) {
 		return EventWhitespace, nil
+	}
+
+	if RegexBlockOpen.Match(cur) {
+		return EventBlockOpen, nil
+	}
+
+	if RegexBlockClose.Match(cur) {
+		return EventBlockClose, nil
 	}
 
 	return EventUnknown, nil
@@ -165,7 +184,7 @@ func Line(runner *Runner) (Event, error) {
 		runner.Print()
 	}
 
-	runner.Print()
+	runner.Newline()
 	runner.Indent()
 	err := runner.Advance()
 	if err != nil {
@@ -204,6 +223,33 @@ func Whitespace(runner *Runner) (Event, error) {
 	return EventNonWhitespace, nil
 }
 
+func BlockOpen(runner *Runner) (Event, error) {
+	runner.Print()
+	runner.Newline()
+	runner.IncreaseIndent()
+	runner.Indent()
+	err := runner.Advance()
+	if err != nil {
+		return EventUnknown, fmt.Errorf("BlockOpen: %w", err)
+	}
+
+	if RegexWhitespaceNewline.Match([]byte{runner.cur}) {
+		return EventWhitespace, nil
+	}
+
+	return EventNonWhitespace, nil
+}
+
+func BlockClose(runner *Runner) (Event, error) {
+	runner.Newline()
+	runner.DecreaseIndent()
+	runner.Indent()
+	runner.Print()
+	// runner.Newline()
+	runner.Advance()
+	return EventAny, nil
+}
+
 var PrettyStateMachine = StateMachine{
 	StateMain: {
 		Main,
@@ -211,6 +257,8 @@ var PrettyStateMachine = StateMachine{
 			EventAlphanum:      StateAlphanum,
 			EventLineSeparator: StateLineEnd,
 			EventWhitespace:    StateWhitespace1,
+			EventBlockOpen:     StateBlockOpen,
+			EventBlockClose:    StateBlockClose,
 		},
 	},
 	StateAlphanum: {
@@ -239,6 +287,19 @@ var PrettyStateMachine = StateMachine{
 		map[Event]StateId{
 			EventWhitespace:    StateWhitespace,
 			EventNonWhitespace: StateMain,
+		},
+	},
+	StateBlockOpen: {
+		BlockOpen,
+		map[Event]StateId{
+			EventWhitespace:    StateWhitespace,
+			EventNonWhitespace: StateMain,
+		},
+	},
+	StateBlockClose: {
+		BlockClose,
+		map[Event]StateId{
+			EventAny: StateMain,
 		},
 	},
 }
