@@ -13,14 +13,16 @@ import (
 type StateId string
 
 const (
-	StateUnknown     StateId = "Unknown"
-	StateMain        StateId = "Main"
-	StateAlphanum    StateId = "Alphanum"
-	StateLineEnd     StateId = "LineEnd"
-	StateWhitespace  StateId = "Whitespace"
-	StateWhitespace1 StateId = "Whitespace1"
-	StateBlockOpen   StateId = "BlockOpen"
-	StateBlockClose  StateId = "BlockClose"
+	StateUnknown         StateId = "Unknown"
+	StateMain            StateId = "Main"
+	StateAlphanum        StateId = "Alphanum"
+	StateLineEnd         StateId = "LineEnd"
+	StateWhitespace      StateId = "Whitespace"
+	StateWhitespace1     StateId = "Whitespace1"
+	StateBlockOpen       StateId = "BlockOpen"
+	StateBlockClose      StateId = "BlockClose"
+	StateBlockEnd        StateId = "BlockEnd"
+	StateBlockEndNewline StateId = "BlockEndNewline"
 )
 
 type Event int
@@ -58,7 +60,7 @@ func NewRunner(sm StateMachine, input io.Reader) (*Runner, error) {
 		stateMachine: sm,
 		input:        bufio.NewReader(input),
 		indentLevel:  0,
-		indent:       "  ", // TODO: make configurable
+		indent:       "    ", // TODO: make configurable
 	}
 
 	// Initialize cur
@@ -245,8 +247,41 @@ func BlockClose(runner *Runner) (Event, error) {
 	runner.DecreaseIndent()
 	runner.Indent()
 	runner.Print()
-	// runner.Newline()
 	runner.Advance()
+	if RegexLine.Match([]byte{runner.cur}) {
+		return EventLineSeparator, nil
+	}
+	return EventAny, nil
+}
+
+func BlockEnd(runner *Runner) (Event, error) {
+	if !RegexWhitespaceNewline.Match([]byte{runner.cur}) {
+		runner.Print()
+	}
+
+	err := runner.Advance()
+	if err != nil {
+		return EventUnknown, fmt.Errorf("BlockEnd: %w", err)
+	}
+
+	if RegexLine.Match([]byte{runner.cur}) {
+		return EventLineSeparator, nil
+	}
+
+	if RegexWhitespaceNewline.Match([]byte{runner.cur}) {
+		return EventWhitespace, nil
+	}
+
+	if RegexBlockClose.Match([]byte{runner.cur}) {
+		return EventBlockClose, nil
+	}
+
+	return EventAny, nil
+}
+
+func BlockEndNewline(runner *Runner) (Event, error) {
+	runner.Newline()
+	runner.Indent()
 	return EventAny, nil
 }
 
@@ -298,6 +333,22 @@ var PrettyStateMachine = StateMachine{
 	},
 	StateBlockClose: {
 		BlockClose,
+		map[Event]StateId{
+			EventLineSeparator: StateBlockEnd,
+			EventAny:           StateMain,
+		},
+	},
+	StateBlockEnd: {
+		BlockEnd,
+		map[Event]StateId{
+			EventLineSeparator: StateBlockEnd,
+			EventWhitespace:    StateBlockEnd,
+			EventBlockClose:    StateBlockClose,
+			EventAny:           StateBlockEndNewline,
+		},
+	},
+	StateBlockEndNewline: {
+		BlockEndNewline,
 		map[Event]StateId{
 			EventAny: StateMain,
 		},
