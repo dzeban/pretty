@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"log"
@@ -23,21 +24,25 @@ const (
 	StateBlockClose      StateId = "BlockClose"
 	StateBlockEnd        StateId = "BlockEnd"
 	StateBlockEndNewline StateId = "BlockEndNewline"
+	StateQuoteOpen       StateId = "QuoteOpen"
+	StateQuoteClose      StateId = "QuoteClose"
+	StateString          StateId = "String"
 )
 
-type Event int
+type Event string
 
 const (
-	EventUnknown Event = iota
-	EventStop
-	EventAny
-	EventAlphanum
-	EventNonAlphanum
-	EventWhitespace
-	EventNonWhitespace
-	EventLineSeparator
-	EventBlockOpen
-	EventBlockClose
+	EventUnknown       Event = "EventUnknown"
+	EventStop          Event = "EventStop"
+	EventAny           Event = "EventAny"
+	EventAlphanum      Event = "EventAlphanum"
+	EventNonAlphanum   Event = "EventNonAlphanum"
+	EventWhitespace    Event = "EventWhitespace"
+	EventNonWhitespace Event = "EventNonWhitespace"
+	EventLineSeparator Event = "EventLineSeparator"
+	EventBlockOpen     Event = "EventBlockOpen"
+	EventBlockClose    Event = "EventBlockClose"
+	EventQuote         Event = "EventQuote"
 )
 
 type State struct {
@@ -53,6 +58,8 @@ type Runner struct {
 	indent       string
 	indentLevel  int
 	cur          byte
+	quote        byte
+	debug        bool
 }
 
 func NewRunner(sm StateMachine, input io.Reader) (*Runner, error) {
@@ -84,7 +91,7 @@ func (r *Runner) Run(next StateId) error {
 		event, err = state.Action(r)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				return nil
+				break
 			}
 			return fmt.Errorf("halt on error: %w", err)
 		}
@@ -96,9 +103,17 @@ func (r *Runner) Run(next StateId) error {
 		if event == EventStop {
 			break
 		}
+
+		curState := next // only for logging
+
 		next = state.Transitions[event]
 		state = r.stateMachine[next]
+
+		if r.debug {
+			fmt.Fprintf(os.Stderr, "%v(%q): %v -> %v\n", curState, r.cur, event, next)
+		}
 	}
+	r.Newline()
 	return nil
 }
 
@@ -134,12 +149,13 @@ func (r *Runner) DecreaseIndent() {
 }
 
 var (
-	RegexAlphanum          = regexp.MustCompile(`[^{(\[\])} \t\n,;]`)
+	RegexAlphanum          = regexp.MustCompile("[^{(\\[\\])} \t\n,;'\"`]")
 	RegexLine              = regexp.MustCompile(`[,;\n]`)
 	RegexWhitespace        = regexp.MustCompile(`[ \t]`)
 	RegexWhitespaceNewline = regexp.MustCompile(`[ \t\n]`)
 	RegexBlockOpen         = regexp.MustCompile(`[{(\[]`)
 	RegexBlockClose        = regexp.MustCompile(`[})\]]`)
+	RegexQuote             = regexp.MustCompile("['\"`]")
 )
 
 func Main(runner *Runner) (Event, error) {
@@ -162,6 +178,10 @@ func Main(runner *Runner) (Event, error) {
 
 	if RegexBlockClose.Match(cur) {
 		return EventBlockClose, nil
+	}
+
+	if RegexQuote.Match(cur) {
+		return EventQuote, nil
 	}
 
 	return EventUnknown, nil
@@ -285,6 +305,40 @@ func BlockEndNewline(runner *Runner) (Event, error) {
 	return EventAny, nil
 }
 
+func QuoteOpen(runner *Runner) (Event, error) {
+	// Save open quote to match closing
+	runner.quote = runner.cur
+
+	runner.Print()
+	runner.Advance()
+
+	if runner.cur == runner.quote {
+		return EventQuote, nil
+	}
+
+	return EventAny, nil
+}
+
+func QuoteClose(runner *Runner) (Event, error) {
+	runner.Print()
+	runner.Advance()
+
+	runner.quote = 0
+
+	return EventAny, nil
+}
+
+func String(runner *Runner) (Event, error) {
+	runner.Print()
+	runner.Advance()
+
+	if runner.cur == runner.quote {
+		return EventQuote, nil
+	}
+
+	return EventAny, nil
+}
+
 var PrettyStateMachine = StateMachine{
 	StateMain: {
 		Main,
@@ -294,6 +348,7 @@ var PrettyStateMachine = StateMachine{
 			EventWhitespace:    StateWhitespace1,
 			EventBlockOpen:     StateBlockOpen,
 			EventBlockClose:    StateBlockClose,
+			EventQuote:         StateQuoteOpen,
 		},
 	},
 	StateAlphanum: {
@@ -353,13 +408,37 @@ var PrettyStateMachine = StateMachine{
 			EventAny: StateMain,
 		},
 	},
+	StateQuoteOpen: {
+		QuoteOpen,
+		map[Event]StateId{
+			EventQuote: StateQuoteClose,
+			EventAny:   StateString,
+		},
+	},
+	StateQuoteClose: {
+		QuoteClose,
+		map[Event]StateId{
+			EventAny: StateMain,
+		},
+	},
+	StateString: {
+		String,
+		map[Event]StateId{
+			EventQuote: StateQuoteClose,
+			EventAny:   StateString,
+		},
+	},
 }
 
 func main() {
+	debug := flag.Bool("debug", false, "Enable debug printing")
+	flag.Parse()
+
 	runner, err := NewRunner(PrettyStateMachine, os.Stdin)
 	if err != nil {
 		log.Fatal(err)
 	}
+	runner.debug = *debug
 
 	err = runner.Run(StateMain)
 	if err != nil {
