@@ -54,18 +54,23 @@ type StateMachine map[StateId]State
 
 type Runner struct {
 	stateMachine StateMachine
-	input        *bufio.Reader
-	indent       string
-	indentLevel  int
-	cur          byte
-	quote        byte
-	debug        bool
+
+	input  *bufio.Reader
+	output io.Writer
+
+	indent      string
+	indentLevel int
+
+	cur   byte
+	quote byte
+	debug bool
 }
 
-func NewRunner(sm StateMachine, input io.Reader) (*Runner, error) {
+func NewRunner(sm StateMachine, input io.Reader, output io.Writer) (*Runner, error) {
 	smr := Runner{
 		stateMachine: sm,
 		input:        bufio.NewReader(input),
+		output:       output,
 		indentLevel:  0,
 		indent:       "    ", // TODO: make configurable
 	}
@@ -118,11 +123,11 @@ func (r *Runner) Run(next StateId) error {
 }
 
 func (r *Runner) Print() {
-	os.Stdout.Write([]byte{r.cur})
+	r.output.Write([]byte{r.cur})
 }
 
 func (r *Runner) Newline() {
-	os.Stdout.WriteString("\n")
+	r.output.Write([]byte("\n"))
 }
 
 func (r *Runner) Advance() error {
@@ -136,7 +141,7 @@ func (r *Runner) Advance() error {
 
 func (r *Runner) Indent() {
 	for i := 0; i < r.indentLevel; i++ {
-		fmt.Print(r.indent)
+		r.output.Write([]byte(r.indent))
 	}
 }
 
@@ -271,6 +276,9 @@ func BlockClose(runner *Runner) (Event, error) {
 	if RegexLine.Match([]byte{runner.cur}) {
 		return EventLineSeparator, nil
 	}
+	if RegexWhitespaceNewline.Match([]byte{runner.cur}) {
+		return EventWhitespace, nil
+	}
 	return EventAny, nil
 }
 
@@ -324,6 +332,10 @@ func QuoteClose(runner *Runner) (Event, error) {
 	runner.Advance()
 
 	runner.quote = 0
+
+	if RegexWhitespaceNewline.Match([]byte{runner.cur}) {
+		return EventWhitespace, nil
+	}
 
 	return EventAny, nil
 }
@@ -390,6 +402,7 @@ var PrettyStateMachine = StateMachine{
 		BlockClose,
 		map[Event]StateId{
 			EventLineSeparator: StateBlockEnd,
+			EventWhitespace:    StateWhitespace,
 			EventAny:           StateMain,
 		},
 	},
@@ -418,7 +431,8 @@ var PrettyStateMachine = StateMachine{
 	StateQuoteClose: {
 		QuoteClose,
 		map[Event]StateId{
-			EventAny: StateMain,
+			EventWhitespace: StateWhitespace,
+			EventAny:        StateMain,
 		},
 	},
 	StateString: {
@@ -434,7 +448,7 @@ func main() {
 	debug := flag.Bool("debug", false, "Enable debug printing")
 	flag.Parse()
 
-	runner, err := NewRunner(PrettyStateMachine, os.Stdin)
+	runner, err := NewRunner(PrettyStateMachine, os.Stdin, os.Stdout)
 	if err != nil {
 		log.Fatal(err)
 	}
